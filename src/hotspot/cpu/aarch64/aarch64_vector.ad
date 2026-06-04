@@ -404,6 +404,13 @@ source %{
   // Exceptions:
   // If the "add_input" is identical to one of the multiply operands, then fusing
   // does not introduce an additional dependency edge and is allowed.
+  //
+  // The main idea behind this change is to improve parallelism between the two inputs
+  // of AddVL. When "add_input" is MulVL or MLA and has no dependency on MulVL
+  // (the other input of AddVL), we can benefit from executing add_input and MulVL
+  // in parallel. However, this parallelism depends on hardware scheduling behavior
+  // and available resources, so it does not apply uniformly across all microarchitectures.
+  // Therefore, AvoidMLAChain is applied selectively.
   bool Matcher::is_multiply_accumulate_candidate(const Node* n) {
     assert(n->Opcode() == Op_AddVL || n->Opcode() == Op_SubVL ,
            "Invalid opcode: vmlaL/vmlsL are only valid for AddVL/SubVL nodes.");

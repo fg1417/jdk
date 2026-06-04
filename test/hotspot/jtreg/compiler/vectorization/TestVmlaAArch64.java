@@ -23,10 +23,9 @@
 
 /**
  * @test
- * @bug 8282541
+ * @bug 8372153
  * @summary AArch64: Performance regression in long reduction microbenchmarks after JDK-8340093
  * @requires vm.compiler2.enabled
- * @requires os.simpleArch == "aarch64"
  * @library /test/lib /
  * @run driver compiler.vectorization.TestVmlaAArch64
  */
