@@ -26,6 +26,7 @@
  * @bug 8372153
  * @summary AArch64: Performance regression in long reduction microbenchmarks after JDK-8340093
  * @requires vm.compiler2.enabled
+ * @modules jdk.incubator.vector
  * @library /test/lib /
  * @run driver compiler.vectorization.TestVmlaAArch64
  */
@@ -34,9 +35,16 @@ package compiler.vectorization;
 
 import compiler.lib.ir_framework.*;
 
+import jdk.incubator.vector.LongVector;
+import jdk.incubator.vector.VectorOperators;
+import jdk.incubator.vector.VectorSpecies;
+
+import jdk.test.lib.Platform;
+
 public class TestVmlaAArch64 {
   private static final int ARRLEN = 1024;
   private static final int ITERS  = 11000;
+  private static final VectorSpecies<Long> SPECIES_128 = LongVector.SPECIES_128;
 
   private static long[] a;
   private static long[] b;
@@ -44,9 +52,11 @@ public class TestVmlaAArch64 {
   private static long lres;
 
   public static void main(String args[]) {
-      if (System.getProperty("os.arch").equals("aarch64")) {
-          TestFramework.runWithFlags("-XX:-AvoidMLAChain");
-          TestFramework.runWithFlags("-XX:+AvoidMLAChain");
+      if (Platform.isAArch64()) {
+          TestFramework.runWithFlags("--add-modules=jdk.incubator.vector", "-XX:-AvoidMLAChain");
+          TestFramework.runWithFlags("--add-modules=jdk.incubator.vector", "-XX:+AvoidMLAChain");
+      } else {
+          TestFramework.runWithFlags("--add-modules=jdk.incubator.vector");
       }
       System.out.println("PASSED");
   }
@@ -82,6 +92,37 @@ public class TestVmlaAArch64 {
 
   @Test
   @IR(applyIfCPUFeature = {"sve", "true"},
+      applyIfAnd = {"MaxVectorSize", "<= 16", "AvoidMLAChain", "true"},
+      // The peeled first iteration generates one VMLA, but the main loop should not.
+      counts = {IRNode.VMLA, "=1"})
+  @IR(applyIfCPUFeature = {"sve", "true"},
+      applyIf = {"AvoidMLAChain", "false"},
+      counts = {IRNode.VMLA, ">0"})
+  public long vector_api_add_dot_product() {
+      LongVector acc = LongVector.zero(SPECIES_128);
+      for (int i = 0; i < SPECIES_128.loopBound(a.length); i += SPECIES_128.length()) {
+          LongVector av = LongVector.fromArray(SPECIES_128, a, i);
+          LongVector bv = LongVector.fromArray(SPECIES_128, b, i);
+          acc = acc.add(av.mul(bv));
+      }
+      return acc.reduceLanes(VectorOperators.ADD);
+  }
+
+  @Run(test = {"vector_api_add_dot_product"}, mode = RunMode.STANDALONE)
+  public void test_vector_api_add_dot_product() {
+      a = new long[ARRLEN];
+      b = new long[ARRLEN];
+      for(int i = 0 ; i < ARRLEN; i++) {
+          a[i] = i;
+          b[i] = i;
+      }
+      for (int i = 0; i < ITERS; i++) {
+          lres = vector_api_add_dot_product();
+      }
+  }
+
+  @Test
+  @IR(applyIfCPUFeature = {"sve", "true"},
       counts = {IRNode.VMLA, ">0"})
   public long vector_mul_add_shared() {
       long res = 0L;
@@ -104,6 +145,45 @@ public class TestVmlaAArch64 {
       }
       for (int i = 0; i < ITERS; i++) {
           lres = vector_mul_add_shared();
+      }
+  }
+
+  @Test
+  @IR(applyIfCPUFeature = {"sve", "true"},
+      applyIfAnd = {"MaxVectorSize", "<= 16", "AvoidMLAChain", "true"},
+      counts = {IRNode.VMLA, "=0"})
+  @IR(applyIfCPUFeature = {"sve", "true"},
+      applyIf = {"AvoidMLAChain", "false"},
+      counts = {IRNode.VMLA, ">0"})
+  public long if_else_phi_add() {
+      LongVector acc = LongVector.zero(SPECIES_128);
+      for (int i = 0; i < SPECIES_128.loopBound(a.length); i += SPECIES_128.length()) {
+          LongVector av = LongVector.fromArray(SPECIES_128, a, i);
+          LongVector bv = LongVector.fromArray(SPECIES_128, b, i);
+          LongVector cv = LongVector.fromArray(SPECIES_128, c, i);
+          LongVector selected;
+          if ((i & SPECIES_128.length()) == 0) {
+              selected = av.mul(bv);
+          } else {
+              selected = bv.mul(cv);
+          }
+          acc = acc.add(selected.add(av.mul(cv)));
+      }
+      return acc.reduceLanes(VectorOperators.ADD);
+  }
+
+  @Run(test = {"if_else_phi_add"}, mode = RunMode.STANDALONE)
+  public void test_if_else_phi_add() {
+      a = new long[ARRLEN];
+      b = new long[ARRLEN];
+      c = new long[ARRLEN];
+      for(int i = 0 ; i < ARRLEN; i++) {
+          a[i] = i;
+          b[i] = i;
+          c[i] = i;
+      }
+      for (int i = 0; i < ITERS; i++) {
+          lres = if_else_phi_add();
       }
   }
 }
