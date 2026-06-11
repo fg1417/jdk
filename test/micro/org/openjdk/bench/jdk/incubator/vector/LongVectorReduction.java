@@ -26,6 +26,7 @@ import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
 import jdk.incubator.vector.LongVector;
+import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
 
@@ -57,6 +58,7 @@ public class LongVectorReduction {
     private long[] in1;
     private long[] in2;
     private long[] in3;
+    private VectorMask<Long> mask;
 
     @Setup
     public void setup() {
@@ -64,6 +66,7 @@ public class LongVectorReduction {
         in1 = new long[size];
         in2 = new long[size];
         in3 = new long[size];
+        mask = VectorMask.fromLong(SPECIES_128, 1);
         for (int i = 0; i < size; i++) {
             in1[i] = r.nextLong();
             in2[i] = r.nextLong();
@@ -104,6 +107,30 @@ public class LongVectorReduction {
             LongVector a = LongVector.fromArray(SPECIES_128, in1, i);
             LongVector b = LongVector.fromArray(SPECIES_128, in2, i);
             acc = acc.sub(a.mul(b));
+        }
+        long res = acc.reduceLanes(VectorOperators.ADD);
+        bh.consume(res);
+    }
+
+    @Benchmark
+    public void addDotProductMasked(Blackhole bh) {
+        LongVector acc = LongVector.zero(SPECIES_128);
+        for (int i = 0; i < SPECIES_128.loopBound(size); i += SPECIES_128.length()) {
+            LongVector a = LongVector.fromArray(SPECIES_128, in1, i);
+            LongVector b = LongVector.fromArray(SPECIES_128, in2, i);
+            acc = acc.add(a.mul(b), mask);
+        }
+        long res = acc.reduceLanes(VectorOperators.ADD);
+        bh.consume(res);
+    }
+
+    @Benchmark
+    public void subDotProductMasked(Blackhole bh) {
+        LongVector acc = LongVector.zero(SPECIES_128);
+        for (int i = 0; i < SPECIES_128.loopBound(size); i += SPECIES_128.length()) {
+            LongVector a = LongVector.fromArray(SPECIES_128, in1, i);
+            LongVector b = LongVector.fromArray(SPECIES_128, in2, i);
+            acc = acc.sub(a.mul(b), mask);
         }
         long res = acc.reduceLanes(VectorOperators.ADD);
         bh.consume(res);

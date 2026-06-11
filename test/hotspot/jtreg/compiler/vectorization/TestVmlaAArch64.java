@@ -36,6 +36,7 @@ package compiler.vectorization;
 import compiler.lib.ir_framework.*;
 
 import jdk.incubator.vector.LongVector;
+import jdk.incubator.vector.VectorMask;
 import jdk.incubator.vector.VectorOperators;
 import jdk.incubator.vector.VectorSpecies;
 
@@ -49,6 +50,7 @@ public class TestVmlaAArch64 {
   private static long[] a;
   private static long[] b;
   private static long[] c;
+  private static VectorMask<Long> mask;
   private static long lres;
 
   public static void main(String args[]) {
@@ -81,12 +83,43 @@ public class TestVmlaAArch64 {
   public void test_vector_add_dot_product() {
       a = new long[ARRLEN];
       b = new long[ARRLEN];
-      for(int i = 0 ; i < ARRLEN; i++) {
+      for (int i = 0; i < ARRLEN; i++) {
           a[i] = i;
           b[i] = i;
       }
       for (int i = 0; i < ITERS; i++) {
           lres = vector_add_dot_product();
+      }
+  }
+
+  @Test
+  @IR(applyIfCPUFeature = {"sve", "true"},
+      applyIfAnd = {"MaxVectorSize", "<= 16", "AvoidMLAChain", "true"},
+      counts = {IRNode.VMLS, "=0"})
+  @IR(applyIfCPUFeature = {"sve", "true"},
+      applyIf = {"AvoidMLAChain", "false"},
+      counts = {IRNode.VMLS, ">0"})
+  public long vector_sub_dot_product() {
+      long res = 0L;
+      for (int i = 0; i < a.length; i++) {
+          long val = (a[i] * b[i]) + (a[i] * c[i]) - (b[i] * c[i]);
+          res += val;
+      }
+      return res;
+  }
+
+  @Run(test = {"vector_sub_dot_product"}, mode = RunMode.STANDALONE)
+  public void test_vector_sub_dot_product() {
+      a = new long[ARRLEN];
+      b = new long[ARRLEN];
+      c = new long[ARRLEN];
+      for (int i = 0; i < ARRLEN; i++) {
+          a[i] = i;
+          b[i] = i;
+          c[i] = i;
+      }
+      for (int i = 0; i < ITERS; i++) {
+          lres = vector_sub_dot_product();
       }
   }
 
@@ -112,12 +145,107 @@ public class TestVmlaAArch64 {
   public void test_vector_api_add_dot_product() {
       a = new long[ARRLEN];
       b = new long[ARRLEN];
-      for(int i = 0 ; i < ARRLEN; i++) {
+      for (int i = 0; i < ARRLEN; i++) {
           a[i] = i;
           b[i] = i;
       }
       for (int i = 0; i < ITERS; i++) {
           lres = vector_api_add_dot_product();
+      }
+  }
+
+  @Test
+  @IR(applyIfCPUFeature = {"sve", "true"},
+      applyIfAnd = {"MaxVectorSize", "<= 16", "AvoidMLAChain", "true"},
+      // The peeled first iteration generates one VMLS, but the main loop should not.
+      counts = {IRNode.VMLS, "=1"})
+  @IR(applyIfCPUFeature = {"sve", "true"},
+      applyIf = {"AvoidMLAChain", "false"},
+      counts = {IRNode.VMLS, ">0"})
+  public long vector_api_sub_dot_product() {
+      LongVector acc = LongVector.zero(SPECIES_128);
+      for (int i = 0; i < SPECIES_128.loopBound(a.length); i += SPECIES_128.length()) {
+          LongVector av = LongVector.fromArray(SPECIES_128, a, i);
+          LongVector bv = LongVector.fromArray(SPECIES_128, b, i);
+          acc = acc.sub(av.mul(bv));
+      }
+      return acc.reduceLanes(VectorOperators.ADD);
+  }
+
+  @Run(test = {"vector_api_sub_dot_product"}, mode = RunMode.STANDALONE)
+  public void test_vector_api_sub_dot_product() {
+      a = new long[ARRLEN];
+      b = new long[ARRLEN];
+      for (int i = 0; i < ARRLEN; i++) {
+          a[i] = i;
+          b[i] = i;
+      }
+      for (int i = 0; i < ITERS; i++) {
+          lres = vector_api_sub_dot_product();
+      }
+  }
+
+  @Test
+  @IR(applyIfCPUFeature = {"sve", "true"},
+      applyIfAnd = {"MaxVectorSize", "<= 16", "AvoidMLAChain", "true"},
+      // The peeled first iteration generates one VMLA, but the main loop should not.
+      counts = {IRNode.VMLA_MASKED, "=1"})
+  @IR(applyIfCPUFeature = {"sve", "true"},
+      applyIf = {"AvoidMLAChain", "false"},
+      counts = {IRNode.VMLA_MASKED, ">0"})
+  public long vector_api_add_dot_product_masked() {
+      LongVector acc = LongVector.zero(SPECIES_128);
+      for (int i = 0; i < SPECIES_128.loopBound(a.length); i += SPECIES_128.length()) {
+          LongVector av = LongVector.fromArray(SPECIES_128, a, i);
+          LongVector bv = LongVector.fromArray(SPECIES_128, b, i);
+          acc = acc.add(av.mul(bv), mask);
+      }
+      return acc.reduceLanes(VectorOperators.ADD);
+  }
+
+  @Run(test = {"vector_api_add_dot_product_masked"}, mode = RunMode.STANDALONE)
+  public void test_vector_api_add_dot_product_masked() {
+      a = new long[ARRLEN];
+      b = new long[ARRLEN];
+      mask = VectorMask.fromLong(SPECIES_128, 1);
+      for (int i = 0; i < ARRLEN; i++) {
+          a[i] = i;
+          b[i] = i;
+      }
+      for (int i = 0; i < ITERS; i++) {
+          lres = vector_api_add_dot_product_masked();
+      }
+  }
+
+  @Test
+  @IR(applyIfCPUFeature = {"sve", "true"},
+      applyIfAnd = {"MaxVectorSize", "<= 16", "AvoidMLAChain", "true"},
+      // The peeled first iteration generates one VMLS, but the main loop should not.
+      counts = {IRNode.VMLS_MASKED, "=1"})
+  @IR(applyIfCPUFeature = {"sve", "true"},
+      applyIf = {"AvoidMLAChain", "false"},
+      counts = {IRNode.VMLS_MASKED, ">0"})
+  public long vector_api_sub_dot_product_masked() {
+      LongVector acc = LongVector.zero(SPECIES_128);
+      for (int i = 0; i < SPECIES_128.loopBound(a.length); i += SPECIES_128.length()) {
+          LongVector av = LongVector.fromArray(SPECIES_128, a, i);
+          LongVector bv = LongVector.fromArray(SPECIES_128, b, i);
+          acc = acc.sub(av.mul(bv), mask);
+      }
+      return acc.reduceLanes(VectorOperators.ADD);
+  }
+
+  @Run(test = {"vector_api_sub_dot_product_masked"}, mode = RunMode.STANDALONE)
+  public void test_vector_api_sub_dot_product_masked() {
+      a = new long[ARRLEN];
+      b = new long[ARRLEN];
+      mask = VectorMask.fromLong(SPECIES_128, 1);
+      for (int i = 0; i < ARRLEN; i++) {
+          a[i] = i;
+          b[i] = i;
+      }
+      for (int i = 0; i < ITERS; i++) {
+          lres = vector_api_sub_dot_product_masked();
       }
   }
 
@@ -138,13 +266,40 @@ public class TestVmlaAArch64 {
       a = new long[ARRLEN];
       b = new long[ARRLEN];
       c = new long[ARRLEN];
-      for(int i = 0 ; i < ARRLEN; i++) {
+      for (int i = 0; i < ARRLEN; i++) {
           a[i] = i;
           b[i] = i;
           c[i] = i;
       }
       for (int i = 0; i < ITERS; i++) {
           lres = vector_mul_add_shared();
+      }
+  }
+
+  @Test
+  @IR(applyIfCPUFeature = {"sve", "true"},
+      counts = {IRNode.VMLS, ">0"})
+  public long vector_mul_sub_shared() {
+      long res = 0L;
+      for (int i = 0; i < a.length; i++) {
+          long val = a[i] * b[i];
+          res += val - val * c[i];
+      }
+      return res;
+  }
+
+  @Run(test = {"vector_mul_sub_shared"}, mode = RunMode.STANDALONE)
+  public void test_vector_mul_sub_shared() {
+      a = new long[ARRLEN];
+      b = new long[ARRLEN];
+      c = new long[ARRLEN];
+      for (int i = 0; i < ARRLEN; i++) {
+          a[i] = i;
+          b[i] = i;
+          c[i] = i;
+      }
+      for (int i = 0; i < ITERS; i++) {
+          lres = vector_mul_sub_shared();
       }
   }
 
@@ -177,13 +332,52 @@ public class TestVmlaAArch64 {
       a = new long[ARRLEN];
       b = new long[ARRLEN];
       c = new long[ARRLEN];
-      for(int i = 0 ; i < ARRLEN; i++) {
+      for (int i = 0; i < ARRLEN; i++) {
           a[i] = i;
           b[i] = i;
           c[i] = i;
       }
       for (int i = 0; i < ITERS; i++) {
           lres = if_else_phi_add();
+      }
+  }
+
+  @Test
+  @IR(applyIfCPUFeature = {"sve", "true"},
+      applyIfAnd = {"MaxVectorSize", "<= 16", "AvoidMLAChain", "true"},
+      counts = {IRNode.VMLS, "=0"})
+  @IR(applyIfCPUFeature = {"sve", "true"},
+      applyIf = {"AvoidMLAChain", "false"},
+      counts = {IRNode.VMLS, ">0"})
+  public long if_else_phi_sub() {
+      LongVector acc = LongVector.zero(SPECIES_128);
+      for (int i = 0; i < SPECIES_128.loopBound(a.length); i += SPECIES_128.length()) {
+          LongVector av = LongVector.fromArray(SPECIES_128, a, i);
+          LongVector bv = LongVector.fromArray(SPECIES_128, b, i);
+          LongVector cv = LongVector.fromArray(SPECIES_128, c, i);
+          LongVector selected;
+          if ((i & SPECIES_128.length()) == 0) {
+              selected = av.mul(bv);
+          } else {
+              selected = bv.mul(cv);
+          }
+          acc = acc.add(selected.sub(av.mul(cv)));
+      }
+      return acc.reduceLanes(VectorOperators.ADD);
+  }
+
+  @Run(test = {"if_else_phi_sub"}, mode = RunMode.STANDALONE)
+  public void test_if_else_phi_sub() {
+      a = new long[ARRLEN];
+      b = new long[ARRLEN];
+      c = new long[ARRLEN];
+      for (int i = 0; i < ARRLEN; i++) {
+          a[i] = i;
+          b[i] = i;
+          c[i] = i;
+      }
+      for (int i = 0; i < ITERS; i++) {
+          lres = if_else_phi_sub();
       }
   }
 }

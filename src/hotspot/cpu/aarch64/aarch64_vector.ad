@@ -412,15 +412,25 @@ source %{
   // and available resources, so it does not apply uniformly across all microarchitectures.
   // Therefore, AvoidMLAChain is applied selectively.
   bool Matcher::is_multiply_accumulate_candidate(const Node* n) {
-    assert(n->Opcode() == Op_AddVL || n->Opcode() == Op_SubVL ,
-           "Invalid opcode: vmlaL/vmlsL are only valid for AddVL/SubVL nodes.");
+    if (n->Opcode() != Op_AddVL && n->Opcode() != Op_SubVL) {
+      return true;
+    }
     // Only apply the chain-length heuristic to 128-bit vectors.
     if (!AvoidMLAChain || Matcher::vector_length_in_bytes(n) != 16) {
       return true;
     }
 
-    Node* in1 = n->in(1);
-    Node* in2 = n->in(2);
+    Node* in1 = nullptr;
+    Node* in2 = nullptr;
+    if (n->is_predicated_vector()) {
+      // Masked AD rules use (AddVL/SubVL (Binary src1 src2) pg).
+      assert(n->in(1)->Opcode() == Op_Binary, "");
+      in1 = n->in(1)->in(1);
+      in2 = n->in(1)->in(2);
+    } else {
+      in1 = n->in(1);
+      in2 = n->in(2);
+    }
 
     // Exception:
     // If the "add_input" is already needed to compute the "mul", the
@@ -432,12 +442,12 @@ source %{
     //            \     MulVL                 MulVL    /
     //             \      /                      \    /
     //            AddVL/SubVL                     AddVL
-    if (in1->Opcode() == Op_MulVL) {
+    if (VectorNode::is_unpredicated_vector_long_multiply(in1)) {
       if (in2 == in1->in(1) || in2 == in1->in(2)) {
         return true;
       }
     }
-    if (in2->Opcode() == Op_MulVL) {
+    if (VectorNode::is_unpredicated_vector_long_multiply(in2)) {
       if (in1 == in2->in(1) || in1 == in2->in(2)) {
         return true;
       }
@@ -2866,7 +2876,7 @@ instruct vmlaL(vReg dst_src1, vReg src2, vReg src3) %{
 %}
 
 instruct vmla_masked(vReg dst_src1, vReg src2, vReg src3, pRegGov pg) %{
-  predicate(UseSVE > 0);
+  predicate(UseSVE > 0 && Matcher::is_multiply_accumulate_candidate(n));
   match(Set dst_src1 (AddVB (Binary dst_src1 (MulVB src2 src3)) pg));
   match(Set dst_src1 (AddVS (Binary dst_src1 (MulVS src2 src3)) pg));
   match(Set dst_src1 (AddVI (Binary dst_src1 (MulVI src2 src3)) pg));
@@ -2957,7 +2967,7 @@ instruct vmlsL(vReg dst_src1, vReg src2, vReg src3) %{
 %}
 
 instruct vmls_masked(vReg dst_src1, vReg src2, vReg src3, pRegGov pg) %{
-  predicate(UseSVE > 0);
+  predicate(UseSVE > 0 && Matcher::is_multiply_accumulate_candidate(n));
   match(Set dst_src1 (SubVB (Binary dst_src1 (MulVB src2 src3)) pg));
   match(Set dst_src1 (SubVS (Binary dst_src1 (MulVS src2 src3)) pg));
   match(Set dst_src1 (SubVI (Binary dst_src1 (MulVI src2 src3)) pg));
