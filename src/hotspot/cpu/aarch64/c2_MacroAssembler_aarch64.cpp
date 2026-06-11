@@ -2974,7 +2974,7 @@ int C2_MacroAssembler::vector_iota_entry_index(BasicType bt) {
 void C2_MacroAssembler::jump_table_switch(Register switch_val, int jump_table_offset, uint jump_table_slot_size) {
   assert(Matcher::use_compressed_jump_table, "");
   int scale = exact_log2(jump_table_slot_size);
-  // On AArch64, when UseCompressedJumpTable is enabled, jump_table_offset may not be 4-byte aligned.
+  // On AArch64, when use_compressed_jump_table is enabled, jump_table_offset may not be 4-byte aligned.
   uint64_t offset;
   int jump_table_offset_low_2_bits = jump_table_offset & 3;
   int jump_table_offset_high_bits = jump_table_offset ^ jump_table_offset_low_2_bits;
