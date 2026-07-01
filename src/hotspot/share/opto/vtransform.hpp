@@ -1036,7 +1036,7 @@ struct VTransformNodeEntry : public ResourceObj {
       // (base/stride/offset) to group similar accesses.
       if (a->_vp != nullptr && b->_vp != nullptr &&
           a->_vp->is_valid() && b->_vp->is_valid()) {
-        return VPointer::cmp_summands_and_con(*(a->_vp), *(b->_vp));
+        return VPointer::cmp_priority_order(*(a->_vp), *(b->_vp));
       }
 
       // Stable sorting.
