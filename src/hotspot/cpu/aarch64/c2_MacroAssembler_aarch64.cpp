@@ -2990,8 +2990,7 @@ void C2_MacroAssembler::jump_table_switch(Register switch_val, int jump_table_of
       ldr(rscratch1, Address(rscratch1, switch_val, Address::lsl(scale)));
       break;
   }
-  adrp(rscratch2, InternalAddress(code()->insts_begin()), offset);
-  add(rscratch2, rscratch2, offset); // rscratch2 = instruction section base
+  adr(rscratch2, InternalAddress(code()->insts_begin())); // rscratch2 = instruction section base
   add(rscratch2, rscratch1, rscratch2); // target = instruction section base + relative offset
   br(rscratch2);
 }

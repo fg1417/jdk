@@ -8532,7 +8532,7 @@ instruct cmpL3_reg_imm(iRegINoSp dst, iRegL src1, immLAddSub src2, rFlagsReg fla
 %}
 
 instruct jumptable_switch_offset(iRegIorL2I switch_val) %{
-  match(Jump (ConvI2L switch_val) );
+  match(Jump (ConvI2L switch_val));
 
   format %{
     "jump_table_switch $switch_val\n\t"

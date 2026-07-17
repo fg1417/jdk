@@ -426,61 +426,36 @@ class AbstractAssembler : public ResourceObj  {
   //
   // We must remember the code section (insts or stubs) in c1
   // so we can reset to the proper section in end_a_const().
-  address byte_constant(jint c) {
+  template <typename T>
+  address numeric_constant(T c) {
     CodeSection* c1 = _code_section;
-    address ptr = start_a_const(sizeof(jubyte), sizeof(jubyte));
+    address ptr = start_a_const(sizeof(T), sizeof(T));
     if (ptr != nullptr) {
-      emit_int8(c);
+      code_section()->emit_native(c);
       end_a_const(c1);
     }
     return ptr;
   }
 
-  address short_constant(jint c) {
-    CodeSection* c1 = _code_section;
-    address ptr = start_a_const(sizeof(jushort), sizeof(jushort));
-    if (ptr != nullptr) {
-      emit_int16(c);
-      end_a_const(c1);
-    }
-    return ptr;
+  address byte_constant(jubyte c) {
+    return numeric_constant(c);
+  }
+
+  address short_constant(jushort c) {
+    return numeric_constant(c);
   }
 
   address int_constant(jint c) {
-    CodeSection* c1 = _code_section;
-    address ptr = start_a_const(sizeof(c), sizeof(c));
-    if (ptr != nullptr) {
-      emit_int32(c);
-      end_a_const(c1);
-    }
-    return ptr;
+    return numeric_constant(c);
   }
   address long_constant(jlong c) {
-    CodeSection* c1 = _code_section;
-    address ptr = start_a_const(sizeof(c), sizeof(c));
-    if (ptr != nullptr) {
-      emit_int64(c);
-      end_a_const(c1);
-    }
-    return ptr;
+    return numeric_constant(c);
   }
   address double_constant(jdouble c) {
-    CodeSection* c1 = _code_section;
-    address ptr = start_a_const(sizeof(c), sizeof(c));
-    if (ptr != nullptr) {
-      emit_double(c);
-      end_a_const(c1);
-    }
-    return ptr;
+    return numeric_constant(c);
   }
   address float_constant(jfloat c) {
-    CodeSection* c1 = _code_section;
-    address ptr = start_a_const(sizeof(c), sizeof(c));
-    if (ptr != nullptr) {
-      emit_float(c);
-      end_a_const(c1);
-    }
-    return ptr;
+    return numeric_constant(c);
   }
   address address_constant(address c) {
     CodeSection* c1 = _code_section;
